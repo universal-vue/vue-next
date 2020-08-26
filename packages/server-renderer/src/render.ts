@@ -87,10 +87,9 @@ export async function renderComponentVNode(
 
   const context = instance.appContext.provides.uvueContext
   if (context) {
-    const serverCallbacks: ((instance: ComponentInternalInstance) => any)[] =
-      context.__serverCallbacks
+    const serverCallbacks: (() => any)[] = context.__serverCallbacks
     if (serverCallbacks && serverCallbacks.length) {
-      await Promise.all(serverCallbacks.map(f => f(instance).catch(() => null)))
+      await Promise.all(serverCallbacks.map(f => f().catch(() => null)))
     }
   }
 
