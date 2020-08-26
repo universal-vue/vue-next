@@ -85,7 +85,7 @@ export function renderComponentVNode(
   const instance = createComponentInstance(vnode, parentComponent, null)
   const res = setupComponent(instance, true /* isSSR */)
 
-  let callbacksPromise: Promise<any>
+  let callbacksPromise: Promise<any[]> | undefined
   const context = instance.appContext.provides.uvueContext
   if (context) {
     const serverCallbacks: (() => any)[] = context.__serverCallbacks

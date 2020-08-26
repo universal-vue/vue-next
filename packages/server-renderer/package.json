@@ -5,7 +5,8 @@
   "main": "index.js",
   "types": "dist/server-renderer.d.ts",
   "scripts": {
-    "prepublishOnly": "cd ../.. && yarn build server-renderer",
+    "build": "cd ../.. && yarn build server-renderer",
+    "prepublishOnly": "yarn build",
     "pub:dev": "yarn publish --registry http://localhost:4873"
   },
   "files": [
