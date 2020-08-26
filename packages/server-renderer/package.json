@@ -1,9 +1,13 @@
 {
-  "name": "@vue/server-renderer",
-  "version": "3.0.0-rc.8",
+  "name": "@uvue/server-renderer",
+  "version": "3.0.0-uvue.1",
   "description": "@vue/server-renderer",
   "main": "index.js",
   "types": "dist/server-renderer.d.ts",
+  "scripts": {
+    "prepublishOnly": "cd ../.. && yarn build server-renderer",
+    "pub:dev": "yarn publish --registry http://localhost:4873"
+  },
   "files": [
     "index.js",
     "dist"
@@ -30,7 +34,7 @@
     "vue": "3.0.0-rc.8"
   },
   "dependencies": {
-    "@vue/shared": "3.0.0-rc.8",
-    "@vue/compiler-ssr": "3.0.0-rc.8"
+    "@vue/compiler-ssr": "3.0.0-rc.8",
+    "@vue/shared": "3.0.0-rc.8"
   }
 }

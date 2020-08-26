@@ -78,12 +78,25 @@ export function createBuffer() {
   }
 }
 
-export function renderComponentVNode(
+export async function renderComponentVNode(
   vnode: VNode,
   parentComponent: ComponentInternalInstance | null = null
-): SSRBuffer | Promise<SSRBuffer> {
+): Promise<SSRBuffer> {
   const instance = createComponentInstance(vnode, parentComponent, null)
   const res = setupComponent(instance, true /* isSSR */)
+
+  const context = instance.appContext.provides.uvueContext
+  if (context) {
+    const serverAsyncCallbacks: ((
+      instance: ComponentInternalInstance
+    ) => any)[] = context.__serverAsyncCallbacks
+    if (serverAsyncCallbacks && serverAsyncCallbacks.length) {
+      await Promise.all(
+        serverAsyncCallbacks.map(f => f(instance).catch(() => null))
+      )
+    }
+  }
+
   if (isPromise(res)) {
     return res
       .catch(err => {
