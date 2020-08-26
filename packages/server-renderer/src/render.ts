@@ -78,18 +78,34 @@ export function createBuffer() {
   }
 }
 
-export async function renderComponentVNode(
+export function renderComponentVNode(
   vnode: VNode,
   parentComponent: ComponentInternalInstance | null = null
-): Promise<SSRBuffer> {
+): Promise<SSRBuffer> | SSRBuffer {
   const instance = createComponentInstance(vnode, parentComponent, null)
   const res = setupComponent(instance, true /* isSSR */)
 
+  let callbacksPromise: Promise<any>
   const context = instance.appContext.provides.uvueContext
   if (context) {
     const serverCallbacks: (() => any)[] = context.__serverCallbacks
     if (serverCallbacks && serverCallbacks.length) {
-      await Promise.all(serverCallbacks.map(f => f().catch(() => null)))
+      callbacksPromise = Promise.all(
+        serverCallbacks.map(f => f().catch(() => null))
+      )
+    }
+  }
+
+  if (callbacksPromise) {
+    if (isPromise(res)) {
+      return res
+        .catch(err => {
+          warn(`[@vue/server-renderer]: Uncaught error in async setup:\n`, err)
+        })
+        .then(() => callbacksPromise)
+        .then(() => renderComponentSubTree(instance))
+    } else {
+      return callbacksPromise.then(() => renderComponentSubTree(instance))
     }
   }
 
