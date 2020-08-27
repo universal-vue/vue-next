@@ -91,7 +91,11 @@ export function renderComponentVNode(
     const serverCallbacks: (() => any)[] = context.__serverCallbacks
     if (serverCallbacks && serverCallbacks.length) {
       callbacksPromise = Promise.all(
-        serverCallbacks.map(f => f().catch(() => null))
+        serverCallbacks.map(f => {
+          const r = f()
+          if (isPromise(r)) return r.catch(() => null)
+          return Promise.resolve(r)
+        })
       )
     }
   }
