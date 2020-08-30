@@ -100,25 +100,19 @@ export function renderComponentVNode(
     }
   }
 
-  if (callbacksPromise) {
-    if (isPromise(res)) {
-      return res
-        .catch(err => {
-          warn(`[@vue/server-renderer]: Uncaught error in async setup:\n`, err)
-        })
-        .then(() => callbacksPromise)
-        .then(() => renderComponentSubTree(instance))
-    } else {
-      return callbacksPromise.then(() => renderComponentSubTree(instance))
-    }
-  }
-
-  if (isPromise(res)) {
-    return res
-      .catch(err => {
+  const beforeRenderPromises = []
+  if (isPromise(res))
+    beforeRenderPromises.push(
+      res.catch(err => {
         warn(`[@vue/server-renderer]: Uncaught error in async setup:\n`, err)
       })
-      .then(() => renderComponentSubTree(instance))
+    )
+  if (isPromise(callbacksPromise)) beforeRenderPromises.push(callbacksPromise)
+
+  if (beforeRenderPromises.length) {
+    return Promise.all(beforeRenderPromises).then(() => {
+      return renderComponentSubTree(instance)
+    })
   } else {
     return renderComponentSubTree(instance)
   }
