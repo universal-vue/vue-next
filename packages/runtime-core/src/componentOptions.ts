@@ -42,11 +42,7 @@ import {
   WritableComputedOptions,
   toRaw
 } from '@vue/reactivity'
-import {
-  ComponentObjectPropsOptions,
-  ExtractPropTypes,
-  normalizePropsOptions
-} from './componentProps'
+import { ComponentObjectPropsOptions, ExtractPropTypes } from './componentProps'
 import { EmitsOptions } from './componentEmits'
 import { Directive } from './directives'
 import {
@@ -107,6 +103,7 @@ export interface ComponentOptionsBase<
   directives?: Record<string, Directive>
   inheritAttrs?: boolean
   emits?: (E | EE[]) & ThisType<void>
+  serverPrefetch?(): Promise<any>
 
   // Internal ------------------------------------------------------------------
 
@@ -384,6 +381,9 @@ export function applyOptions(
     watch: watchOptions,
     provide: provideOptions,
     inject: injectOptions,
+    // assets
+    components,
+    directives,
     // lifecycle
     beforeMount,
     mounted,
@@ -428,7 +428,7 @@ export function applyOptions(
   const checkDuplicateProperties = __DEV__ ? createDuplicateChecker() : null
 
   if (__DEV__) {
-    const propsOptions = normalizePropsOptions(options)[0]
+    const [propsOptions] = instance.propsOptions
     if (propsOptions) {
       for (const key in propsOptions) {
         checkDuplicateProperties!(OptionTypes.PROPS, key)
@@ -565,6 +565,32 @@ export function applyOptions(
       : provideOptions
     for (const key in provides) {
       provide(key, provides[key])
+    }
+  }
+
+  // asset options.
+  // To reduce memory usage, only components with mixins or extends will have
+  // resolved asset registry attached to instance.
+  if (asMixin) {
+    if (components) {
+      extend(
+        instance.components ||
+          (instance.components = extend(
+            {},
+            (instance.type as ComponentOptions).components
+          ) as Record<string, ConcreteComponent>),
+        components
+      )
+    }
+    if (directives) {
+      extend(
+        instance.directives ||
+          (instance.directives = extend(
+            {},
+            (instance.type as ComponentOptions).directives
+          )),
+        directives
+      )
     }
   }
 
@@ -742,10 +768,8 @@ export function resolveMergedOptions(
   const globalMixins = instance.appContext.mixins
   if (!globalMixins.length && !mixins && !extendsOptions) return raw
   const options = {}
-  globalMixins.forEach(m => mergeOptions(options, m, instance))
-  extendsOptions && mergeOptions(options, extendsOptions, instance)
-  mixins && mixins.forEach(m => mergeOptions(options, m, instance))
   mergeOptions(options, raw, instance)
+  globalMixins.forEach(m => mergeOptions(options, m, instance))
   return (raw.__merged = options)
 }
 
@@ -758,4 +782,9 @@ function mergeOptions(to: any, from: any, instance: ComponentInternalInstance) {
       to[key] = from[key]
     }
   }
+  const { mixins, extends: extendsOptions } = from
+
+  extendsOptions && mergeOptions(to, extendsOptions, instance)
+  mixins &&
+    mixins.forEach((m: ComponentOptionsMixin) => mergeOptions(to, m, instance))
 }
