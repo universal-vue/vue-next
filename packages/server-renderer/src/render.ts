@@ -2,6 +2,7 @@ import {
   Comment,
   Component,
   ComponentInternalInstance,
+  ComponentOptions,
   DirectiveBinding,
   Fragment,
   mergeProps,
@@ -84,35 +85,48 @@ export function renderComponentVNode(
 ): Promise<SSRBuffer> | SSRBuffer {
   const instance = createComponentInstance(vnode, parentComponent, null)
   const res = setupComponent(instance, true /* isSSR */)
+  const hasAsyncSetup = isPromise(res)
+  const prefetch = (vnode.type as ComponentOptions).serverPrefetch
 
-  let callbacksPromise: Promise<any[]> | undefined
+  let serverCallbacks: Function[] = []
   const context = instance.appContext.provides.uvueContext
   if (context) {
-    const serverCallbacks: (() => any)[] = context.__serverCallbacks
-    if (serverCallbacks && serverCallbacks.length) {
-      callbacksPromise = Promise.all(
-        serverCallbacks.map(f => {
-          const r = f()
-          if (isPromise(r)) return r.catch(() => null)
-          return Promise.resolve(r)
-        })
-      )
-    }
+    serverCallbacks =
+      context.__serverCallbacks && context.__serverCallbacks.length
+        ? context.__serverCallbacks
+        : []
   }
 
-  const beforeRenderPromises = []
-  if (isPromise(res))
-    beforeRenderPromises.push(
-      res.catch(err => {
-        warn(`[@vue/server-renderer]: Uncaught error in async setup:\n`, err)
+  if (hasAsyncSetup || prefetch || serverCallbacks.length) {
+    let p = hasAsyncSetup
+      ? (res as Promise<void>).catch(err => {
+          warn(`[@vue/server-renderer]: Uncaught error in async setup:\n`, err)
+        })
+      : Promise.resolve()
+    if (prefetch) {
+      p = p.then(() => prefetch.call(instance.proxy)).catch(err => {
+        warn(`[@vue/server-renderer]: Uncaught error in serverPrefetch:\n`, err)
       })
-    )
-  if (isPromise(callbacksPromise)) beforeRenderPromises.push(callbacksPromise)
-
-  if (beforeRenderPromises.length) {
-    return Promise.all(beforeRenderPromises).then(() => {
-      return renderComponentSubTree(instance)
-    })
+    }
+    if (serverCallbacks.length) {
+      p = p
+        .then(() => {
+          Promise.all(
+            serverCallbacks.map(f => {
+              const r = f()
+              if (isPromise(r)) return r.catch(() => null)
+              return Promise.resolve(r)
+            })
+          )
+        })
+        .catch(err => {
+          warn(
+            `[@vue/server-renderer]: Uncaught error in serverCallbacks:\n`,
+            err
+          )
+        })
+    }
+    return p.then(() => renderComponentSubTree(instance))
   } else {
     return renderComponentSubTree(instance)
   }
@@ -124,7 +138,11 @@ function renderComponentSubTree(
   const comp = instance.type as Component
   const { getBuffer, push } = createBuffer()
   if (isFunction(comp)) {
-    renderVNode(push, renderComponentRoot(instance), instance)
+    renderVNode(
+      push,
+      (instance.subTree = renderComponentRoot(instance)),
+      instance
+    )
   } else {
     if (!instance.render && !comp.ssrRender && isString(comp.template)) {
       comp.ssrRender = ssrCompile(comp.template, instance)
@@ -162,7 +180,11 @@ function renderComponentSubTree(
       )
       setCurrentRenderingInstance(null)
     } else if (instance.render) {
-      renderVNode(push, renderComponentRoot(instance), instance)
+      renderVNode(
+        push,
+        (instance.subTree = renderComponentRoot(instance)),
+        instance
+      )
     } else {
       warn(
         `Component ${
@@ -248,15 +270,7 @@ function renderElementVNode(
     openTag += ssrRenderAttrs(props, tag)
   }
 
-  if (scopeId) {
-    openTag += ` ${scopeId}`
-    const treeOwnerId = parentComponent && parentComponent.type.__scopeId
-    // vnode's own scopeId and the current rendering component's scopeId is
-    // different - this is a slot content node.
-    if (treeOwnerId && treeOwnerId !== scopeId) {
-      openTag += ` ${treeOwnerId}-s`
-    }
-  }
+  openTag += resolveScopeId(scopeId, vnode, parentComponent)
 
   push(openTag + `>`)
   if (!isVoidTag(tag)) {
@@ -286,6 +300,33 @@ function renderElementVNode(
     }
     push(`</${tag}>`)
   }
+}
+
+function resolveScopeId(
+  scopeId: string | null,
+  vnode: VNode,
+  parentComponent: ComponentInternalInstance | null
+) {
+  let res = ``
+  if (scopeId) {
+    res = ` ${scopeId}`
+  }
+  if (parentComponent) {
+    const treeOwnerId = parentComponent.type.__scopeId
+    // vnode's own scopeId and the current rendering component's scopeId is
+    // different - this is a slot content node.
+    if (treeOwnerId && treeOwnerId !== scopeId) {
+      res += ` ${treeOwnerId}-s`
+    }
+    if (vnode === parentComponent.subTree) {
+      res += resolveScopeId(
+        parentComponent.vnode.scopeId,
+        parentComponent.vnode,
+        parentComponent.parent
+      )
+    }
+  }
+  return res
 }
 
 function applySSRDirectives(
