@@ -98,7 +98,7 @@ export function renderComponentVNode(
   }
 
   if (hasAsyncSetup || prefetch || serverCallbacks.length) {
-    let p = hasAsyncSetup
+    let p: Promise<any> = hasAsyncSetup
       ? (res as Promise<void>).catch(err => {
           warn(`[@vue/server-renderer]: Uncaught error in async setup:\n`, err)
         })
@@ -109,8 +109,11 @@ export function renderComponentVNode(
       })
     }
     if (serverCallbacks.length) {
+      // Clean serverCallbacks
+      context.__serverCallbacks = []
+
       p = p
-        .then(() => {
+        .then(() =>
           Promise.all(
             serverCallbacks.map(f => {
               const r = f()
@@ -118,7 +121,7 @@ export function renderComponentVNode(
               return Promise.resolve(r)
             })
           )
-        })
+        )
         .catch(err => {
           warn(
             `[@vue/server-renderer]: Uncaught error in serverCallbacks:\n`,

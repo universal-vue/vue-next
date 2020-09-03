@@ -1,6 +1,6 @@
 {
   "name": "@uvue/server-renderer",
-  "version": "3.0.0-rc.10.u1",
+  "version": "3.0.0-rc.10.u2",
   "description": "@vue/server-renderer",
   "main": "index.js",
   "types": "dist/server-renderer.d.ts",
